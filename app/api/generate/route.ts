@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// ============================================================
+// MAAS - Maa AI Studio | API Route
+// Protected with per-minute + daily rate limiting
+// ============================================================
+
 const GEMINI_KEYS = [
   process.env.GEMINI_API_KEY_1,
   process.env.GEMINI_API_KEY_2,
@@ -17,17 +22,60 @@ function getNextKey(): string | null {
   return key;
 }
 
-const requestCounts = new Map<string, { count: number; time: number }>();
+// ============================================================
+// RATE LIMITING - Per Minute + Daily
+// ============================================================
 
-function checkRateLimit(ip: string): boolean {
+const MINUTE_LIMIT = 5;   // 5 requests per minute per IP
+const DAILY_LIMIT = 50;   // 50 requests per day per IP
+const MAX_PROMPT_LENGTH = 2000; // Max characters allowed in prompt
+
+const requestCounts = new Map<string, {
+  minuteCount: number;
+  minuteTime: number;
+  dailyCount: number;
+  dailyTime: number;
+}>();
+
+function checkRateLimit(ip: string): { allowed: boolean; reason?: string } {
   const now = Date.now();
-  const userRequests = requestCounts.get(ip);
-  if (!userRequests) { requestCounts.set(ip, { count: 1, time: now }); return true; }
-  if (now - userRequests.time > 60000) { requestCounts.set(ip, { count: 1, time: now }); return true; }
-  if (userRequests.count >= 15) return false;
-  requestCounts.set(ip, { count: userRequests.count + 1, time: userRequests.time });
-  return true;
+  const user = requestCounts.get(ip);
+
+  if (!user) {
+    requestCounts.set(ip, {
+      minuteCount: 1,
+      minuteTime: now,
+      dailyCount: 1,
+      dailyTime: now,
+    });
+    return { allowed: true };
+  }
+
+  // Reset minute count if 60 seconds have passed
+  const minuteReset = now - user.minuteTime > 60_000;
+  const minuteCount = minuteReset ? 1 : user.minuteCount + 1;
+  const minuteTime = minuteReset ? now : user.minuteTime;
+
+  // Reset daily count if 24 hours have passed
+  const dailyReset = now - user.dailyTime > 86_400_000;
+  const dailyCount = dailyReset ? 1 : user.dailyCount + 1;
+  const dailyTime = dailyReset ? now : user.dailyTime;
+
+  requestCounts.set(ip, { minuteCount, minuteTime, dailyCount, dailyTime });
+
+  if (dailyCount > DAILY_LIMIT) {
+    return { allowed: false, reason: "daily" };
+  }
+  if (minuteCount > MINUTE_LIMIT) {
+    return { allowed: false, reason: "minute" };
+  }
+
+  return { allowed: true };
 }
+
+// ============================================================
+// AI PROVIDERS
+// ============================================================
 
 async function tryGemini(prompt: string): Promise<string | null> {
   for (let attempt = 0; attempt < GEMINI_KEYS.length; attempt++) {
@@ -42,7 +90,7 @@ async function tryGemini(prompt: string): Promise<string | null> {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 2000, temperature: 0.7 }
+            generationConfig: { maxOutputTokens: 2000, temperature: 0.7 },
           }),
         }
       );
@@ -78,12 +126,12 @@ async function tryGroq(prompt: string): Promise<string | null> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${key}`
+        Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }]
+        messages: [{ role: "user", content: prompt }],
       }),
     });
     const data = await res.json();
@@ -93,7 +141,9 @@ async function tryGroq(prompt: string): Promise<string | null> {
       return null;
     }
     return data?.choices?.[0]?.message?.content || null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 async function tryClaude(prompt: string): Promise<string | null> {
@@ -106,65 +156,109 @@ async function tryClaude(prompt: string): Promise<string | null> {
       headers: {
         "Content-Type": "application/json",
         "x-api-key": key,
-        "anthropic-version": "2023-06-01"
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }]
+        messages: [{ role: "user", content: prompt }],
       }),
     });
     const data = await res.json();
     console.log("Claude status:", res.status);
     return data?.content?.[0]?.text || null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
+
+// ============================================================
+// YOUTUBE
+// ============================================================
 
 async function getYouTubeVideos(query: string) {
   try {
     const key = process.env.YOUTUBE_API_KEY;
     if (!key) return [];
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&maxResults=3&type=video&key=${key}`;
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(
+      query
+    )}&maxResults=3&type=video&key=${key}`;
     const res = await fetch(url);
     const data = await res.json();
     if (data.error || !data.items) return [];
-    return data.items.map((item: { snippet: { title: string }; id: { videoId: string } }) => ({
-      title: item.snippet.title,
-      videoId: item.id.videoId,
-    }));
-  } catch { return []; }
+    return data.items.map(
+      (item: { snippet: { title: string }; id: { videoId: string } }) => ({
+        title: item.snippet.title,
+        videoId: item.id.videoId,
+      })
+    );
+  } catch {
+    return [];
+  }
 }
+
+// ============================================================
+// NOTES PARSER
+// ============================================================
 
 function parseNotes(rawNotes: string | null): { tag: string; text: string }[] {
   if (!rawNotes) return [];
   try {
-    const cleaned = rawNotes.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
+    const cleaned = rawNotes
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
     if (start === -1 || end === -1) return [];
     const parsed = JSON.parse(cleaned.slice(start, end + 1));
-    if (Array.isArray(parsed.notes) && parsed.notes.length > 0) return parsed.notes;
+    if (Array.isArray(parsed.notes) && parsed.notes.length > 0)
+      return parsed.notes;
     return [];
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
-export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for") || "unknown";
+// ============================================================
+// MAIN POST HANDLER
+// ============================================================
 
-  if (!checkRateLimit(ip)) {
-    return NextResponse.json({
-      result: "Thoda ruko! 1 minute mein 15 se zyada requests nahi kar sakte. 🙏",
-      ai_used: "none"
-    });
+export async function POST(req: NextRequest) {
+  // Get real IP (works on Vercel)
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+
+  // Rate limit check
+  const limit = checkRateLimit(ip);
+  if (!limit.allowed) {
+    const message =
+      limit.reason === "daily"
+        ? "Aaj ki limit khatam ho gayi (50 requests). Kal dobara aao! 🙏 MAAS free rakhnay ke liye yeh zaruri hai."
+        : "Thoda ruko! 1 minute mein sirf 5 requests kar sakte ho. 😊";
+    return NextResponse.json({ result: message, ai_used: "none" });
   }
 
+  // Parse body
   const body = await req.json();
   const { prompt, mode } = body;
 
-  if (!prompt || prompt.length < 3) {
-    return NextResponse.json({ result: "Kuch meaningful likho 😊", ai_used: "none" });
+  // Prompt validation
+  if (!prompt || prompt.trim().length < 3) {
+    return NextResponse.json({
+      result: "Kuch meaningful likho 😊",
+      ai_used: "none",
+    });
   }
 
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    return NextResponse.json({
+      result: `Prompt bahut lamba hai! ${MAX_PROMPT_LENGTH} characters se kam rakho. 😊`,
+      ai_used: "none",
+    });
+  }
+
+  // Student mode (notes + videos)
   if (mode === "student") {
     const aiPrompt = `Create study notes on: "${prompt}"
 Return ONLY this JSON (no extra text, no backticks, no markdown):
@@ -172,26 +266,44 @@ Return ONLY this JSON (no extra text, no backticks, no markdown):
 
     let rawNotes = await tryGemini(aiPrompt);
     let ai_used = "gemini";
-    if (!rawNotes) { rawNotes = await tryGroq(aiPrompt); ai_used = "groq"; }
-    if (!rawNotes) { rawNotes = await tryClaude(aiPrompt); ai_used = "claude"; }
+    if (!rawNotes) {
+      rawNotes = await tryGroq(aiPrompt);
+      ai_used = "groq";
+    }
+    if (!rawNotes) {
+      rawNotes = await tryClaude(aiPrompt);
+      ai_used = "claude";
+    }
 
     const videos = await getYouTubeVideos(`${prompt} explained in Hindi`);
     let notes = parseNotes(rawNotes);
     if (notes.length === 0) {
-      notes = [{ tag: "Notes", text: rawNotes || "Notes generate nahi huye. Dobara try karo." }];
+      notes = [
+        {
+          tag: "Notes",
+          text: rawNotes || "Notes generate nahi huye. Dobara try karo.",
+        },
+      ];
     }
     return NextResponse.json({ notes, videos, ai_used });
   }
 
+  // General mode
   let result = await tryGemini(prompt);
   let ai_used = "gemini";
-  if (!result) { result = await tryGroq(prompt); ai_used = "groq"; }
-  if (!result) { result = await tryClaude(prompt); ai_used = "claude"; }
+  if (!result) {
+    result = await tryGroq(prompt);
+    ai_used = "groq";
+  }
+  if (!result) {
+    result = await tryClaude(prompt);
+    ai_used = "claude";
+  }
 
   if (!result) {
     return NextResponse.json({
       result: "AI busy hai, thodi der baad try karo 🙏",
-      ai_used: "none"
+      ai_used: "none",
     });
   }
 
