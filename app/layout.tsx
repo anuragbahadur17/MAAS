@@ -1,95 +1,131 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
-
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+import Image from "next/image";
+import Navbar from "@/components/Navbar";
+import { LanguageProvider } from "@/context/LanguageContext";
 
 export const metadata: Metadata = {
-  title: "MAAS — Multilingual AI Assistant for All",
-  description: "Har Indian Ka AI Saathi — Resume banao, Government Letter likho, Sarkari Schemes dhundho — Hindi mein, bilkul free!",
+  title: "MAAS – Maa AI Studio",
+  description: "Free AI tools for every Indian.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+function GlobalFooter() {
   return (
-    <html lang="hi" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">
-        {children}
-        <footer className="bg-gray-900 text-white mt-auto">
+    <footer style={{ background: "rgba(15,15,15,0.95)", backdropFilter: "blur(12px)", color: "#fff", position: "relative", zIndex: 2 }}>
+      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "56px 32px 0" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "2.5fr 1fr 1fr 1fr", gap: "48px", paddingBottom: "40px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
 
-          {/* Main Footer */}
-          <div className="max-w-4xl mx-auto px-6 py-10">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-8">
-
-              {/* Brand */}
-              <div>
-                <p className="text-2xl font-bold text-orange-400 mb-2">MAAS</p>
-                <p className="text-gray-400 text-sm mb-3">MAA AI Studio — Har Indian Ka AI Saathi</p>
-                <p className="text-gray-500 text-xs leading-relaxed">
-                  MAA jaise care karti hai apne bachon ka — waise hum India ke 140 crore nagarikon ka khayal rakhte hain. Bilkul free.
-                </p>
+          {/* Brand */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+              <div style={{ position: "relative", width: "44px", height: "44px", flexShrink: 0 }}>
+                <Image src="/maas-logo.png" alt="MAAS" fill sizes="44px" style={{ objectFit: "contain" }} />
               </div>
-
-              {/* Links */}
               <div>
-                <p className="font-bold text-gray-300 mb-3">Quick Links</p>
-                <div className="space-y-2">
-                  {[
-                    { href: "/resume", label: "Resume Banao" },
-                    { href: "/letter", label: "Government Letter" },
-                    { href: "/schemes", label: "Scheme Finder" },
-                    { href: "/exam", label: "Exam Helper" },
-                    { href: "/suggest", label: "💡 Suggestion Do" },
-                  ].map(link => (
-                    <Link key={link.href} href={link.href}
-                      className="block text-gray-400 text-sm hover:text-orange-400 transition-colors">
-                      {link.label}
-                    </Link>
-                  ))}
-                </div>
+                <div style={{ fontFamily: "Georgia, serif", fontWeight: "900", fontSize: "16px", color: "#fff", letterSpacing: "2px" }}>MAAS</div>
+                <div style={{ fontSize: "10px", color: "#9ca3af", letterSpacing: "1px" }}>Maa AI Studio</div>
               </div>
-
-              {/* Legal + Contact */}
-              <div>
-                <p className="font-bold text-gray-300 mb-3">Company</p>
-                <div className="space-y-2">
-                  {[
-                    { href: "/about", label: "About Us" },
-                    { href: "/contact", label: "Contact" },
-                    { href: "/privacy", label: "Privacy Policy" },
-                    { href: "/terms", label: "Terms of Service" },
-                    { href: "/suggest", label: "Rate Us ⭐" },
-                  ].map(link => (
-                    <Link key={link.href} href={link.href}
-                      className="block text-gray-400 text-sm hover:text-orange-400 transition-colors">
-                      {link.label}
-                    </Link>
-                  ))}
-                </div>
-                <div className="mt-4">
-                  <p className="text-gray-400 text-xs">📧 anuragbahadur.17@gmail.com</p>
-                  <p className="text-gray-400 text-xs mt-1">📍 Sonipat, Haryana, India</p>
-                </div>
-              </div>
-
             </div>
+            <p style={{ fontSize: "13px", color: "#6b7280", lineHeight: 1.75, maxWidth: "240px" }}>
+              AI tools for every Indian. Free, multilingual, no registration required.
+            </p>
+            <p style={{ fontSize: "11px", color: "#4b5563", marginTop: "14px" }}>anuragbahadur.17@gmail.com</p>
+            <p style={{ fontSize: "11px", color: "#4b5563", marginTop: "3px" }}>Sonipat, Haryana, India</p>
+          </div>
 
-            {/* Divider */}
-            <div className="border-t border-gray-800 pt-6 text-center">
-              <p className="text-orange-400 font-bold mb-1">
-                "MAA cares for every citizen of India" 🇮🇳
-              </p>
-              <p className="text-gray-500 text-xs mt-2">
-                Created with ❤️ by <span className="text-orange-300">Anurag Bahadur</span> | Sonipat, Haryana
-              </p>
-              <p className="text-gray-600 text-xs mt-1">
-                © 2026 MAAS — MAA AI Assistant for All | All Rights Reserved
-              </p>
+          {/* Tools */}
+          <div>
+            <p style={{ fontSize: "10px", letterSpacing: "2.5px", color: "#ea580c", textTransform: "uppercase" as const, marginBottom: "16px", fontWeight: "600" }}>Tools</p>
+            {[
+              { label: "Resume Builder", href: "/resume" },
+              { label: "Govt. Letter", href: "/letter" },
+              { label: "Scheme Finder", href: "/schemes" },
+              { label: "Exam Helper", href: "/exam" },
+              { label: "Board Exam Prep", href: "/board-exam" },
+              { label: "Business Docs", href: "/business" },
+            ].map((item) => (
+              <Link key={item.href} href={item.href} style={{ display: "block", fontSize: "12px", color: "#6b7280", textDecoration: "none", marginBottom: "10px", letterSpacing: "0.2px" }}>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+
+          {/* Company */}
+          <div>
+            <p style={{ fontSize: "10px", letterSpacing: "2.5px", color: "#ea580c", textTransform: "uppercase" as const, marginBottom: "16px", fontWeight: "600" }}>Company</p>
+            {[
+              { label: "About MAAS", href: "/about" },
+              { label: "Contact", href: "/contact" },
+              { label: "Feedback", href: "/suggest" },
+            ].map((item) => (
+              <Link key={item.href} href={item.href} style={{ display: "block", fontSize: "12px", color: "#6b7280", textDecoration: "none", marginBottom: "10px" }}>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+
+          {/* Legal */}
+          <div>
+            <p style={{ fontSize: "10px", letterSpacing: "2.5px", color: "#ea580c", textTransform: "uppercase" as const, marginBottom: "16px", fontWeight: "600" }}>Legal</p>
+            {[
+              { label: "Privacy Policy", href: "/privacy" },
+              { label: "Terms of Service", href: "/terms" },
+            ].map((item) => (
+              <Link key={item.href} href={item.href} style={{ display: "block", fontSize: "12px", color: "#6b7280", textDecoration: "none", marginBottom: "10px" }}>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+
+        </div>
+
+        {/* Disclaimer */}
+        <div style={{ padding: "20px 0 28px" }}>
+          <div style={{ borderLeft: "2px solid #ea580c", paddingLeft: "16px", marginBottom: "16px" }}>
+            <p style={{ fontSize: "10px", letterSpacing: "2px", color: "#ea580c", textTransform: "uppercase" as const, fontWeight: "700", margin: "0 0 6px" }}>AI Disclaimer</p>
+            <p style={{ fontSize: "11px", color: "#4b5563", lineHeight: 1.65, margin: 0 }}>
+              Content generated by MAAS is produced by artificial intelligence for informational purposes only. It does not constitute professional advice. For legal, medical, financial, or governmental matters, consult a qualified professional. MAAS disclaims all liability for decisions made based on AI-generated outputs.
+            </p>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <p style={{ fontSize: "11px", color: "#374151", margin: 0 }}>© 2026 Maa AI Studio. All rights reserved.</p>
+            <p style={{ fontSize: "11px", color: "#374151", margin: 0 }}>Built for Bharat 🇮🇳</p>
+          </div>
+        </div>
+
+      </div>
+    </footer>
+  );
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body style={{ margin: 0, padding: 0, background: "transparent" }}>
+        <LanguageProvider>
+
+          {/* Global Watermark */}
+          <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 0 }}>
+            <div style={{ position: "relative", width: "70vw", height: "70vh", opacity: 0.05 }}>
+              <Image src="/maas-logo.png" alt="" fill sizes="70vw" priority style={{ objectFit: "contain" }} />
             </div>
           </div>
 
-        </footer>
+          {/* Navbar */}
+          <div style={{ position: "relative", zIndex: 100 }}>
+            <Navbar />
+          </div>
+
+          {/* Main Content */}
+          <main style={{ position: "relative", zIndex: 1 }}>
+            {children}
+          </main>
+
+          {/* Footer */}
+          <GlobalFooter />
+
+        </LanguageProvider>
       </body>
     </html>
   );

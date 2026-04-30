@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// ── 3 Key Rotation — Jab ek quota khatam ho, doosri use ho ──
 const GEMINI_KEYS = [
   process.env.GEMINI_API_KEY_1,
   process.env.GEMINI_API_KEY_2,
   process.env.GEMINI_API_KEY_3,
   process.env.GEMINI_API_KEY_4,
+  process.env.GEMINI_API_KEY_5,
 ].filter(Boolean) as string[];
 
 let currentKeyIndex = 0;
@@ -17,7 +17,6 @@ function getNextKey(): string | null {
   return key;
 }
 
-// ── Rate Limiting ──
 const requestCounts = new Map<string, { count: number; time: number }>();
 
 function checkRateLimit(ip: string): boolean {
@@ -30,12 +29,10 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-// ── Gemini AI — 3 keys try karega ──
 async function tryGemini(prompt: string): Promise<string | null> {
   for (let attempt = 0; attempt < GEMINI_KEYS.length; attempt++) {
     const key = getNextKey();
     if (!key) continue;
-
     try {
       console.log(`Trying Gemini key ${attempt + 1}...`);
       const res = await fetch(
@@ -49,19 +46,15 @@ async function tryGemini(prompt: string): Promise<string | null> {
           }),
         }
       );
-
       const data = await res.json();
-
       if (res.status === 429) {
         console.log(`Key ${attempt + 1} quota exceeded — trying next key...`);
         continue;
       }
-
       if (!res.ok) {
         console.error(`Key ${attempt + 1} error:`, data?.error?.message);
         continue;
       }
-
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (text) {
         console.log(`✅ Gemini key ${attempt + 1} success!`);
@@ -72,12 +65,37 @@ async function tryGemini(prompt: string): Promise<string | null> {
       continue;
     }
   }
-
   console.error("All Gemini keys exhausted!");
   return null;
 }
 
-// ── Claude Backup ──
+async function tryGroq(prompt: string): Promise<string | null> {
+  try {
+    const key = process.env.GROQ_API_KEY;
+    if (!key) return null;
+    console.log("Trying Groq backup...");
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }]
+      }),
+    });
+    const data = await res.json();
+    console.log("Groq status:", res.status);
+    if (!res.ok) {
+      console.error("Groq error:", data?.error?.message);
+      return null;
+    }
+    return data?.choices?.[0]?.message?.content || null;
+  } catch { return null; }
+}
+
 async function tryClaude(prompt: string): Promise<string | null> {
   try {
     const key = process.env.ANTHROPIC_API_KEY;
@@ -102,7 +120,6 @@ async function tryClaude(prompt: string): Promise<string | null> {
   } catch { return null; }
 }
 
-// ── YouTube Videos ──
 async function getYouTubeVideos(query: string) {
   try {
     const key = process.env.YOUTUBE_API_KEY;
@@ -118,7 +135,6 @@ async function getYouTubeVideos(query: string) {
   } catch { return []; }
 }
 
-// ── Notes Parser ──
 function parseNotes(rawNotes: string | null): { tag: string; text: string }[] {
   if (!rawNotes) return [];
   try {
@@ -132,7 +148,6 @@ function parseNotes(rawNotes: string | null): { tag: string; text: string }[] {
   } catch { return []; }
 }
 
-// ── Main API Handler ──
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for") || "unknown";
 
@@ -150,7 +165,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ result: "Kuch meaningful likho 😊", ai_used: "none" });
   }
 
-  // Student Project Mode
   if (mode === "student") {
     const aiPrompt = `Create study notes on: "${prompt}"
 Return ONLY this JSON (no extra text, no backticks, no markdown):
@@ -158,30 +172,21 @@ Return ONLY this JSON (no extra text, no backticks, no markdown):
 
     let rawNotes = await tryGemini(aiPrompt);
     let ai_used = "gemini";
-
-    if (!rawNotes) {
-      rawNotes = await tryClaude(aiPrompt);
-      ai_used = "claude";
-    }
+    if (!rawNotes) { rawNotes = await tryGroq(aiPrompt); ai_used = "groq"; }
+    if (!rawNotes) { rawNotes = await tryClaude(aiPrompt); ai_used = "claude"; }
 
     const videos = await getYouTubeVideos(`${prompt} explained in Hindi`);
     let notes = parseNotes(rawNotes);
-
     if (notes.length === 0) {
       notes = [{ tag: "Notes", text: rawNotes || "Notes generate nahi huye. Dobara try karo." }];
     }
-
     return NextResponse.json({ notes, videos, ai_used });
   }
 
-  // Default Mode — Resume, Letter, Exam, Business
   let result = await tryGemini(prompt);
   let ai_used = "gemini";
-
-  if (!result) {
-    result = await tryClaude(prompt);
-    ai_used = "claude";
-  }
+  if (!result) { result = await tryGroq(prompt); ai_used = "groq"; }
+  if (!result) { result = await tryClaude(prompt); ai_used = "claude"; }
 
   if (!result) {
     return NextResponse.json({
