@@ -8,6 +8,10 @@ import { LanguageProvider } from "@/context/LanguageContext";
 export const metadata: Metadata = {
   title: "MAAS – Maa AI Studio",
   description: "Free AI tools for every Indian.",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/favicon.png",
+  },
 };
 
 function GlobalFooter() {
